@@ -9,6 +9,8 @@ const App = () => {
   const [map, setMap] = useState(null);
   const [stops, setStops] = useState([]);
   const [routes, setRoutes] = useState([]);
+  const [loading, setLoading] = useState(null);
+
   var popup = null;
 
   useEffect(() => {
@@ -16,7 +18,7 @@ const App = () => {
       const initializedMap = new maplibre.Map({
         container: 'map',
         style: 'https://tiles.openfreemap.org/styles/liberty',
-        center: [0,0],
+        center: [0, 0],
         zoom: 2,
       });
       setMap(initializedMap);
@@ -54,7 +56,7 @@ const App = () => {
           source: 'routes',
           paint: {
             'line-width': 3,
-            'line-color': ['get', 'color'], 
+            'line-color': ['get', 'color'],
           },
         });
 
@@ -102,121 +104,61 @@ const App = () => {
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (file) {
-      const zip = await JSZip.loadAsync(file);
-      const stopsFile = zip.file('stops.txt');
-      const shapesFile = zip.file('shapes.txt');
-      const routesFile = zip.file('routes.txt');
-      const stopTimesFile = zip.file('stop_times.txt');
-      const tripsFile = zip.file('trips.txt');
+      setLoading("extracting...");
+      const worker = new Worker('/gtfsExtractWorker.js');
 
-      if (stopsFile && routesFile && stopTimesFile && tripsFile) {
-        const stopsData = await stopsFile.async('text');
-        const parsedStops = Papa.parse(stopsData, { header: true, skipEmptyLines: true }).data;
-        const stopFeatures = parsedStops.map((stop) => ({
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [parseFloat(stop.stop_lon), parseFloat(stop.stop_lat)],
-          },
-          properties: stop,
-        }));
+      worker.onmessage = (e) => {
+        const { stops, routes, trips, stopTimes, shapes, error } = e.data;
+        if (error) {
+          alert(error);
+        } else {
+          const stopFeatures = stops.map((stop) => ({
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: [parseFloat(stop.stop_lon), parseFloat(stop.stop_lat)],
+            },
+            properties: stop,
+          }));
 
-        setStops(stopFeatures);
-        map.getSource('stops').setData({
-          type: 'FeatureCollection',
-          features: stopFeatures,
-        });
+          setStops(stopFeatures);
+          map.getSource('stops').setData({
+            type: 'FeatureCollection',
+            features: stopFeatures,
+          });
 
-        const routesData = await routesFile.async('text');
-        const parsedRoutes = Papa.parse(routesData, { header: true, skipEmptyLines: true }).data;
-        setRoutes(parsedRoutes);
+          setRoutes(routes);
 
-        const tripsData = await tripsFile.async('text');
-        const parsedTrips = Papa.parse(tripsData, { header: true, skipEmptyLines: true }).data;
+          // center map on data
+          const coordinates = stopFeatures.map((feature) => feature.geometry.coordinates);
+          const bounds = coordinates.reduce((bounds, coord) => bounds.extend(coord), new maplibre.LngLatBounds(coordinates[0], coordinates[0]));
+          map.fitBounds(bounds, { padding: 20 });
 
-        const stopTimesData = await stopTimesFile.async('text');
-        const parsedStopTimes = Papa.parse(stopTimesData, { header: true, skipEmptyLines: true }).data;
+          drawUniqueTrips(routes, trips, stopTimes, shapes, stopFeatures);
 
-        let shapesData = [];
-        if (shapesFile) {
-          const shapesText = await shapesFile.async('text');
-          shapesData = Papa.parse(shapesText, { header: true, skipEmptyLines: true }).data;
+
         }
-
-        // center map on data
-        const coordinates = stopFeatures.map((feature) => feature.geometry.coordinates);
-        const bounds = coordinates.reduce((bounds, coord) => bounds.extend(coord), new maplibre.LngLatBounds(coordinates[0], coordinates[0]));
-        map.fitBounds(bounds, { padding: 20 });
-
-        drawUniqueTrips(parsedRoutes, parsedTrips, parsedStopTimes, shapesData, stopFeatures);
-      } else {
-        alert("The GTFS file does not contain the necessary files.");
-      }
+        // setLoading(false);
+      };
+      worker.postMessage({ file });
     }
   };
 
   const drawUniqueTrips = (routes, trips, stopTimes, shapes, stops) => {
-    const routeColors = routes.reduce((acc, route) => {
-      acc[route.route_id] = `#${route.route_color || '000000'}`;
-      return acc;
-    }, {});
+    const worker = new Worker('/gtfsLineWorker.js');
+    setLoading("processing trips...");
 
-    const tripInfo = trips.reduce((acc, trip) => {
-      acc[trip.trip_id] = { route_id: trip.route_id, shape_id: trip.shape_id };
-      return acc;
-    }, {});
-
-    const tripsByRoute = stopTimes.reduce((acc, stopTime) => {
-      const { trip_id, stop_id } = stopTime;
-      const tripData = tripInfo[trip_id];
-      if (!tripData) return acc;
-
-      const { route_id, shape_id } = tripData;
-      if (!acc[trip_id]) acc[trip_id] = { route_id, shape_id, stops: [] };
-      acc[trip_id].stops.push(stops.find(stop => stop.properties.stop_id === stop_id));
-      return acc;
-    }, {});
-
-    const uniqueSequences = {};
-    for (const [tripId, tripData] of Object.entries(tripsByRoute)) {
-      const stopSequence = tripData.stops.map(stop => stop.properties.stop_id).join('-');
-      const key = `${tripData.route_id}-${stopSequence}`;
-
-      if (!uniqueSequences[key]) {
-        uniqueSequences[key] = {
-          route_id: tripData.route_id,
-          coordinates: tripData.stops.map(stop => stop.geometry.coordinates),
-          shape_id: tripData.shape_id,
-        };
+    worker.onmessage = (e) => {
+      const { geojson, error } = e.data;
+      if (error) {
+        alert(error);
+      } else {
+        map.getSource('routes').setData(geojson);
       }
-    }
-
-    const features = Object.values(uniqueSequences).map(({ route_id, coordinates, shape_id }) => {
-      const routeColor = routeColors[route_id] || '#000000';
-      const shapeCoordinates = shapes.length && shape_id
-        ? shapes
-          .filter(shape => shape.shape_id === shape_id)
-          .sort((a, b) => a.shape_pt_sequence - b.shape_pt_sequence)
-          .map(shape => [parseFloat(shape.shape_pt_lon), parseFloat(shape.shape_pt_lat)])
-        : coordinates;
-
-      return {
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: shapeCoordinates,
-        },
-        properties: {
-          color: routeColor,
-        },
-      };
-    });
-
-    map.getSource('routes').setData({
-      type: 'FeatureCollection',
-      features,
-    });
-  };
+      setLoading(null);
+    };
+    worker.postMessage({ routes, trips, stopTimes, shapes, stops });
+  }
 
   return (
     <div className="h-screen flex flex-col">
@@ -230,7 +172,23 @@ const App = () => {
           onChange={handleFileUpload}
           className="p-2 border rounded-md justify-self-center flex-1"
         />
-        <div className="flex-1"></div>
+        <div className="flex-1">
+          {loading && (
+            <div className="flex content-center m-3 space-x-2">
+              <svg class="w-6 h-6 text-gray-300 animate-spin" viewBox="0 0 64 64" fill="none"
+                xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+                <path
+                  d="M32 3C35.8083 3 39.5794 3.75011 43.0978 5.20749C46.6163 6.66488 49.8132 8.80101 52.5061 11.4939C55.199 14.1868 57.3351 17.3837 58.7925 20.9022C60.2499 24.4206 61 28.1917 61 32C61 35.8083 60.2499 39.5794 58.7925 43.0978C57.3351 46.6163 55.199 49.8132 52.5061 52.5061C49.8132 55.199 46.6163 57.3351 43.0978 58.7925C39.5794 60.2499 35.8083 61 32 61C28.1917 61 24.4206 60.2499 20.9022 58.7925C17.3837 57.3351 14.1868 55.199 11.4939 52.5061C8.801 49.8132 6.66487 46.6163 5.20749 43.0978C3.7501 39.5794 3 35.8083 3 32C3 28.1917 3.75011 24.4206 5.2075 20.9022C6.66489 17.3837 8.80101 14.1868 11.4939 11.4939C14.1868 8.80099 17.3838 6.66487 20.9022 5.20749C24.4206 3.7501 28.1917 3 32 3L32 3Z"
+                  stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path
+                  d="M32 3C36.5778 3 41.0906 4.08374 45.1692 6.16256C49.2477 8.24138 52.7762 11.2562 55.466 14.9605C58.1558 18.6647 59.9304 22.9531 60.6448 27.4748C61.3591 31.9965 60.9928 36.6232 59.5759 40.9762"
+                  stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" class="text-gray-900">
+                </path>
+              </svg>
+              <text>{loading}</text>
+            </div>
+          )}
+        </div>
       </div>
       <div id="map" className="flex-1" />
     </div>
