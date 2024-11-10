@@ -24,24 +24,6 @@ const App = () => {
       setMap(initializedMap);
 
       initializedMap.on('load', () => {
-        initializedMap.addSource('stops', {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features: [],
-          },
-        });
-
-        initializedMap.addLayer({
-          id: 'stops-layer',
-          type: 'circle',
-          source: 'stops',
-          paint: {
-            'circle-radius': 5,
-            'circle-color': '#007cbf',
-          },
-        });
-
         initializedMap.addSource('routes', {
           type: 'geojson',
           data: {
@@ -57,6 +39,23 @@ const App = () => {
           paint: {
             'line-width': 3,
             'line-color': ['get', 'color'],
+          },
+        });
+
+        initializedMap.addSource('stops', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+        });
+        initializedMap.addLayer({
+          id: 'stops-layer',
+          type: 'circle',
+          source: 'stops',
+          paint: {
+            'circle-radius': 5,
+            'circle-color': '#6b7280',
           },
         });
 
@@ -97,6 +96,43 @@ const App = () => {
           }
           initializedMap.getCanvas().style.cursor = '';
         });
+
+        // route popup
+        initializedMap.on('mouseenter', 'routes-layer', (e) => {
+          const totalOccurrences = e.features.reduce((acc, f) => { return acc + f.properties.occurrences }, 0)
+          const feature = e.features[0];
+          const coordinates = e.lngLat;
+          const { color, occurrences } = feature.properties;
+          console.log(e.features.length)
+          if (popup) {
+            popup.remove();
+          }
+
+          const newPopup = new maplibre.Popup({
+            closeButton: false,
+            closeOnClick: false,
+          })
+            .setLngLat(coordinates)
+            .setHTML(
+              `
+              <div>
+                <strong>Route Color:</strong> ${color || 'N/A'}<br />
+                <strong>Occurrences:</strong> ${totalOccurrences || 'N/A'}
+              </div>
+            `)
+            .addTo(initializedMap);
+
+          popup = newPopup;
+          initializedMap.getCanvas().style.cursor = 'pointer';
+        });
+
+        initializedMap.on('mouseleave', 'routes-layer', () => {
+          if (popup) {
+            popup.remove();
+            popup = null;
+          }
+          initializedMap.getCanvas().style.cursor = '';
+        });
       });
     }
   }, [map, popup]);
@@ -106,7 +142,7 @@ const App = () => {
     if (file) {
       setLoading("extracting...");
       const worker = new Worker('/gtfsExtractWorker.js');
-
+      
       worker.onmessage = (e) => {
         const { stops, routes, trips, stopTimes, shapes, error } = e.data;
         if (error) {
@@ -170,11 +206,11 @@ const App = () => {
           type="file"
           accept=".zip"
           onChange={handleFileUpload}
-          className="p-2 border rounded-md justify-self-center flex-1"
+          className="p-2 border rounded-md flex-1 content-center"
         />
         <div className="flex-1">
           {loading && (
-            <div className="flex content-center m-3 space-x-2">
+            <div className="flex content-center m-3 space-x-2 justify-items-center">
               <svg class="w-6 h-6 text-gray-300 animate-spin" viewBox="0 0 64 64" fill="none"
                 xmlns="http://www.w3.org/2000/svg" width="24" height="24">
                 <path
