@@ -11,6 +11,8 @@ const App = () => {
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(null);
   const [feedUrl, setFeedUrl] = useState("");
+  const [shouldFetch, setShouldFetch] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   var popup = null;
 
@@ -34,7 +36,6 @@ const App = () => {
             features: [],
           },
         });
-
         initializedMap.addLayer({
           id: 'routes-layer',
           type: 'line',
@@ -91,7 +92,6 @@ const App = () => {
           popup = newPopup;
           initializedMap.getCanvas().style.cursor = 'pointer';
         });
-
         initializedMap.on('mouseleave', 'stops-layer', () => {
           if (popup) {
             popup.remove();
@@ -128,7 +128,6 @@ const App = () => {
           popup = newPopup;
           initializedMap.getCanvas().style.cursor = 'pointer';
         });
-
         initializedMap.on('mouseleave', 'routes-layer', () => {
           if (popup) {
             popup.remove();
@@ -136,37 +135,54 @@ const App = () => {
           }
           initializedMap.getCanvas().style.cursor = '';
         });
+
+        // Check for URL parameter on initial load
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlFeed = urlParams.get('url');
+        if (urlFeed) {
+          setFeedUrl(urlFeed);
+          setShouldFetch(true);
+        }
       });
     }
   }, [map, popup]);
 
+  useEffect(() => {
+    if (map && shouldFetch) {
+      fetchGtfsFeedFromUrl(feedUrl);
+      setShouldFetch(false);
+    }
+  }, [map, shouldFetch]);
 
   async function fetchGtfsFeedFromUrl(url) {
     try {
       setLoading("Fetching GTFS feed...");
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error("Failed to fetch GTFS feed");
+        setErrorMessage("Failed to download - try downloading the zip manual");
+        setLoading(null);
       }
       const blob = await response.blob();
       console.log(blob);
 
       handleZipFile(blob);
     } catch (error) {
-      alert(`Error fetching GTFS feed: ${error.message}`);
+      setErrorMessage("Failed to download - try downloading the zip manual");
       setLoading(null);
     }
   }
 
   function handleUrlSubmit() {
+    setErrorMessage(null);
     if (feedUrl) {
-      fetchGtfsFeedFromUrl(feedUrl);
+      setShouldFetch(true);
     } else {
-      alert("Please enter a GTFS feed URL");
+      setErrorMessage("Enter a feed URL");
     }
   }
 
   function handleFileUpload(event) {
+    setErrorMessage(null);
     const file = event.target.files[0];
     if (file) {
       handleZipFile(file);
@@ -180,7 +196,7 @@ const App = () => {
       worker.onmessage = (e) => {
         const { stops, routes, trips, stopTimes, shapes, error } = e.data;
         if (error) {
-          alert(error);
+          setErrorMessage(error);
           setLoading(null);
         } else {
           const stopFeatures = stops.map((stop) => ({
@@ -206,10 +222,7 @@ const App = () => {
           map.fitBounds(bounds, { padding: 20 });
 
           drawUniqueTrips(routes, trips, stopTimes, shapes, stopFeatures);
-
-
         }
-        // setLoading(false);
       };
       worker.postMessage({ file });
     }
@@ -252,7 +265,7 @@ const App = () => {
             onChange={(e) => setFeedUrl(e.target.value)}
             className="p-2 border rounded-md flex-1 content-center ml-2"
           />
-          <button onClick={handleUrlSubmit} className="ml-2 p-2 bg-blue-500 text-white rounded-md truncate">
+          <button onClick={handleUrlSubmit} className="ml-2 p-2 bg-blue-500 text-white rounded-md truncate disabled:bg-slate-100 disabled:text-slate-500 disabled:border-slate-200" disabled={!feedUrl}>
             Load from URL
           </button>
         </div>
@@ -271,6 +284,11 @@ const App = () => {
                 </path>
               </svg>
               <div>{loading}</div>
+            </div>
+          )}
+          {!loading && errorMessage && (
+            <div className="flex content-center m-3 space-x-2 justify-items-center text-red-500">
+              {errorMessage}
             </div>
           )}
         </div>
