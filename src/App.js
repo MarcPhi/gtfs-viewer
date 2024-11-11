@@ -120,7 +120,7 @@ const App = () => {
               `
               <div>
                 <strong>Route Color:</strong> ${color || 'N/A'}<br />
-                <strong>Occurrences:</strong> ${totalOccurrences || 'N/A'}
+                <strong>Amount of trips using this:</strong> ${totalOccurrences || 'N/A'}
               </div>
             `)
             .addTo(initializedMap);
@@ -136,7 +136,7 @@ const App = () => {
           initializedMap.getCanvas().style.cursor = '';
         });
 
-        // Check for URL parameter on initial load
+        // check for search parameter
         const urlParams = new URLSearchParams(window.location.search);
         const urlFeed = urlParams.get('url');
         if (urlFeed) {
