@@ -234,7 +234,7 @@ const App = () => {
   return (
     <div className="h-screen flex flex-col">
       <div className="flex m-3">
-        <h1 className="text-4xl content-center flex-1">
+        <h1 className="text-4xl content-center flex-1 truncate">
           GTFS Viewer
         </h1>
         <input
@@ -243,16 +243,20 @@ const App = () => {
           onChange={handleFileUpload}
           className="p-2 border rounded-md flex-1 content-center"
         />
-        <input
-          type="text"
-          placeholder="Enter GTFS feed URL"
-          value={feedUrl}
-          onChange={(e) => setFeedUrl(e.target.value)}
-          className="p-2 border rounded-md flex-1 content-center ml-2"
-        />
-        <button onClick={handleUrlSubmit} className="ml-2 p-2 bg-blue-500 text-white rounded-md">
-          Load from URL
-        </button>
+        <div className="flex-1 flex">
+
+          <input
+            type="text"
+            placeholder="Enter GTFS feed URL"
+            value={feedUrl}
+            onChange={(e) => setFeedUrl(e.target.value)}
+            className="p-2 border rounded-md flex-1 content-center ml-2"
+          />
+          <button onClick={handleUrlSubmit} className="ml-2 p-2 bg-blue-500 text-white rounded-md truncate">
+            Load from URL
+          </button>
+        </div>
+
         <div className="flex-1">
           {loading && (
             <div className="flex content-center m-3 space-x-2 justify-items-center">
