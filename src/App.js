@@ -193,7 +193,7 @@ const App = () => {
   function handleZipFile(file) {
     if (file) {
       setLoading("Extracting...");
-      const worker = new Worker('/gtfsExtractWorker.js');
+      const worker = new Worker(process.env.PUBLIC_URL + "/gtfsExtractWorker.js");
       worker.onmessage = (e) => {
         const { stops, routes, trips, stopTimes, shapes, error } = e.data;
         if (error) {
@@ -230,7 +230,7 @@ const App = () => {
   };
 
   function drawUniqueTrips(routes, trips, stopTimes, shapes, stops) {
-    const worker = new Worker('/gtfsLineWorker.js');
+    const worker = new Worker(process.env.PUBLIC_URL + "/gtfsLineWorker.js");
     setLoading("Processing trips...");
 
     worker.onmessage = (e) => {
