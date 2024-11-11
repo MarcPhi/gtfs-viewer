@@ -4,7 +4,13 @@ if ('function' === typeof importScripts) {
     importScripts('https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js');
     self.onmessage = async function (e) {
         const { file } = e.data;
-        const zip = await JSZip.loadAsync(file);
+        var zip;
+        try {
+            zip = await JSZip.loadAsync(file);
+        } catch (error) {
+            self.postMessage({ error: 'This is not a valid Zip file.' });
+            return;
+        }
 
         const stopsFile = zip.file('stops.txt');
         const shapesFile = zip.file('shapes.txt');

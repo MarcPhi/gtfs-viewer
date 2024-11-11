@@ -10,10 +10,13 @@ const App = () => {
   const [stops, setStops] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(null);
+  const [feedUrl, setFeedUrl] = useState("");
 
   var popup = null;
 
   useEffect(() => {
+    document.title = "GTFS Viewer"
+
     if (!map) {
       const initializedMap = new maplibre.Map({
         container: 'map',
@@ -137,16 +140,48 @@ const App = () => {
     }
   }, [map, popup]);
 
-  const handleFileUpload = async (event) => {
+
+  async function fetchGtfsFeedFromUrl(url) {
+    try {
+      setLoading("Fetching GTFS feed...");
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("Failed to fetch GTFS feed");
+      }
+      const blob = await response.blob();
+      console.log(blob);
+
+      handleZipFile(blob);
+    } catch (error) {
+      alert(`Error fetching GTFS feed: ${error.message}`);
+      setLoading(null);
+    }
+  }
+
+  function handleUrlSubmit() {
+    if (feedUrl) {
+      fetchGtfsFeedFromUrl(feedUrl);
+    } else {
+      alert("Please enter a GTFS feed URL");
+    }
+  }
+
+  function handleFileUpload(event) {
     const file = event.target.files[0];
     if (file) {
-      setLoading("extracting...");
+      handleZipFile(file);
+    }
+  }
+
+  function handleZipFile(file) {
+    if (file) {
+      setLoading("Extracting...");
       const worker = new Worker('/gtfsExtractWorker.js');
-      
       worker.onmessage = (e) => {
         const { stops, routes, trips, stopTimes, shapes, error } = e.data;
         if (error) {
           alert(error);
+          setLoading(null);
         } else {
           const stopFeatures = stops.map((stop) => ({
             type: 'Feature',
@@ -180,9 +215,9 @@ const App = () => {
     }
   };
 
-  const drawUniqueTrips = (routes, trips, stopTimes, shapes, stops) => {
+  function drawUniqueTrips(routes, trips, stopTimes, shapes, stops) {
     const worker = new Worker('/gtfsLineWorker.js');
-    setLoading("processing trips...");
+    setLoading("Processing trips...");
 
     worker.onmessage = (e) => {
       const { geojson, error } = e.data;
@@ -208,20 +243,30 @@ const App = () => {
           onChange={handleFileUpload}
           className="p-2 border rounded-md flex-1 content-center"
         />
+        <input
+          type="text"
+          placeholder="Enter GTFS feed URL"
+          value={feedUrl}
+          onChange={(e) => setFeedUrl(e.target.value)}
+          className="p-2 border rounded-md flex-1 content-center ml-2"
+        />
+        <button onClick={handleUrlSubmit} className="ml-2 p-2 bg-blue-500 text-white rounded-md">
+          Load from URL
+        </button>
         <div className="flex-1">
           {loading && (
             <div className="flex content-center m-3 space-x-2 justify-items-center">
-              <svg class="w-6 h-6 text-gray-300 animate-spin" viewBox="0 0 64 64" fill="none"
+              <svg className="w-6 h-6 text-gray-300 animate-spin" viewBox="0 0 64 64" fill="none"
                 xmlns="http://www.w3.org/2000/svg" width="24" height="24">
                 <path
                   d="M32 3C35.8083 3 39.5794 3.75011 43.0978 5.20749C46.6163 6.66488 49.8132 8.80101 52.5061 11.4939C55.199 14.1868 57.3351 17.3837 58.7925 20.9022C60.2499 24.4206 61 28.1917 61 32C61 35.8083 60.2499 39.5794 58.7925 43.0978C57.3351 46.6163 55.199 49.8132 52.5061 52.5061C49.8132 55.199 46.6163 57.3351 43.0978 58.7925C39.5794 60.2499 35.8083 61 32 61C28.1917 61 24.4206 60.2499 20.9022 58.7925C17.3837 57.3351 14.1868 55.199 11.4939 52.5061C8.801 49.8132 6.66487 46.6163 5.20749 43.0978C3.7501 39.5794 3 35.8083 3 32C3 28.1917 3.75011 24.4206 5.2075 20.9022C6.66489 17.3837 8.80101 14.1868 11.4939 11.4939C14.1868 8.80099 17.3838 6.66487 20.9022 5.20749C24.4206 3.7501 28.1917 3 32 3L32 3Z"
-                  stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"></path>
                 <path
                   d="M32 3C36.5778 3 41.0906 4.08374 45.1692 6.16256C49.2477 8.24138 52.7762 11.2562 55.466 14.9605C58.1558 18.6647 59.9304 22.9531 60.6448 27.4748C61.3591 31.9965 60.9928 36.6232 59.5759 40.9762"
-                  stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" class="text-gray-900">
+                  stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-900">
                 </path>
               </svg>
-              <text>{loading}</text>
+              <div>{loading}</div>
             </div>
           )}
         </div>
