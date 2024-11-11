@@ -1,20 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import maplibre from 'maplibre-gl';
-import JSZip from 'jszip';
-import Papa from 'papaparse';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import 'tailwindcss/tailwind.css';
 
 const App = () => {
   const [map, setMap] = useState(null);
+  // eslint-disable-next-line
   const [stops, setStops] = useState([]);
+  // eslint-disable-next-line
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(null);
   const [feedUrl, setFeedUrl] = useState("");
   const [shouldFetch, setShouldFetch] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  var popup = null;
 
   useEffect(() => {
     document.title = "GTFS Viewer"
@@ -29,6 +28,8 @@ const App = () => {
       setMap(initializedMap);
 
       initializedMap.on('load', () => {
+        var popup = null;
+
         initializedMap.addSource('routes', {
           type: 'geojson',
           data: {
@@ -105,7 +106,7 @@ const App = () => {
           const totalOccurrences = e.features.reduce((acc, f) => { return acc + f.properties.occurrences }, 0)
           const feature = e.features[0];
           const coordinates = e.lngLat;
-          const { color, occurrences } = feature.properties;
+          const { color } = feature.properties;
           console.log(e.features.length)
           if (popup) {
             popup.remove();
@@ -145,14 +146,14 @@ const App = () => {
         }
       });
     }
-  }, [map, popup]);
+  }, [map]);
 
   useEffect(() => {
     if (map && shouldFetch) {
       fetchGtfsFeedFromUrl(feedUrl);
       setShouldFetch(false);
     }
-  }, [map, shouldFetch]);
+  }, [map, shouldFetch, feedUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchGtfsFeedFromUrl(url) {
     try {
