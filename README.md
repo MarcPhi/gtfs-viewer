@@ -1,6 +1,7 @@
 # GTFS Viewer
-
 GTFS Viewer is a React based webapp that allows you to visualize and inspect a zip file from a gtfs feed.
+
+<img src="screenshot.png" alt="Screenshot">
 
 ### Run Local
 1. clone the repository
